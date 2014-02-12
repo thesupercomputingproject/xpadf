@@ -1,6 +1,10 @@
 #if !defined(__32E9AB2346908AABF43BF842837__)
 # define __32E9AB2346908AABF43BF842837__
 
+# if defined(HAVE_CONFIG_H)
+#  include <xpadf/common/config.h>
+# endif /* HAVE_CONFIG_H */
+
 # if defined(__cplusplus)
 #  define XPADF_DEFINE_DATA_TYPE(__base__, __name__)                    \
   typedef __base__ __name__, *P##__name__, &R##__name__;                \
@@ -16,7 +20,7 @@
   XPADF_DEFINE_DATA_TYPE(__type__ __name__, __name__)
 
 # define XPADF_DECLARE_ENUM(__name__)   XPADF_DEFINE_DATA_TYPE(enum __name__, __name__)
-# define XPADF_DECLARE_STRUCT(__name__) XPADF_DECLARE_DATA_TYPE(struct __name__, __name__)
+# define XPADF_DECLARE_STRUCT(__name__) XPADF_DECLARE_DATA_TYPE(struct, __name__)
 
 # if defined(__GNUC__)
 #  include <xpadf/common/gcc/macros.h>
