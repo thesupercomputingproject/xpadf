@@ -27,6 +27,11 @@ XPADF_INTERNAL_FUNCTION(void, _xpadf_ReferenceObject, (XPADF_INOUT PXPADF_OBJECT
   XPADF_ATOMIC_INCREMENT(&_pObject->m_nReferenceCount);
 }
 
+XPADF_INTERNAL_FUNCTION(void, _xpadf_DereferenceObject, (XPADF_INOUT PXPADF_OBJECT _pObject)) {
+  if(XPADF_ATOMIC_DECREMENT(&_pObject->m_nReferenceCount))
+    free(_pObject);
+}
+
 XPADF_FUNCTION(XPADF_RESULT, xpadf_DestroyObject, (XPADF_IN XPADF_HANDLE _hObject)) {
   if(_hObject) {
     PXPADF_OBJECT _pObject = (PXPADF_OBJECT)_hObject;

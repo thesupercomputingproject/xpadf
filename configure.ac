@@ -49,6 +49,19 @@ AS_IF([test "x$ac_cv_c_compiler_gnu" = "xyes"], [
   AC_LANG_POP([C])
 ])
 
+AX_PTHREAD([
+  AC_CHECK_FUNC([pthread_create])
+  AC_CHECK_FUNC([pthread_equal])
+  AC_CHECK_FUNC([pthread_self])
+  AC_CHECK_FUNC([pthread_join])
+  AC_CHECK_FUNC([pthread_attr_init])
+  AC_CHECK_FUNC([pthread_attr_setdetachstate])
+  AC_CHECK_FUNC([pthread_attr_destroy])
+
+  AC_CHECK_TYPE([pthread_attr_t])
+  AC_CHECK_TYPE([pthread_t])
+])
+
 AC_CONFIG_HEADER([include/xpadf/common/config.h:config.h.in])
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
