@@ -9,7 +9,7 @@
 
 XPADF_CALLBACK(XPADF_RESULT, PXPADFThreadCallback, (XPADF_IN     XPADF_HANDLE _hThreadObject,
                                                     XPADF_IN_OPT XPADF_PVOID  _pContext));
-XPADF_CALLBACK(void, PXPADFThreadCleanupCallback, (XPADF_IN     XPADF_HANDLE _hThreadObject,
+XPADF_CALLBACK(void, PXPADFThreadCleanupCallback, (XPADF_IN_OPT XPADF_HANDLE _hThreadObject,
                                                    XPADF_IN_OPT XPADF_PVOID  _pContext,
                                                    XPADF_IN     XPADF_RESULT _nStatus));
 

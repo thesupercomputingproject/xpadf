@@ -14,6 +14,8 @@ XPADF_STATIC_FUNCTION(XPADF_RESULT, _xpadf_DestroyLooper, (XPADF_IN PXPADF_LOOPE
       void *_pTemp = NULL;
       
       pthread_join(_pLooper->m_hThread, &_pTemp);
+
+      return _result;
     }
 
     _pLooper->m_bRunning = XPADF_TRUE;
@@ -44,11 +46,11 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_CreateLooper, (XPADF_OUT    PXPADF_HANDLE    
                                                   XPADF_IN     PXPADFThreadCallback        _pExecuteCallback,
                                                   XPADF_IN_OPT PXPADFThreadCallback        _pStopCallback,
                                                   XPADF_IN_OPT PXPADFThreadCleanupCallback _pCleanupCallback)) {
-  if(_pExecuteCallback) {
-    XPADF_RESULT _result = _xpadf_AllocateThreadObject(_phLooper, XPADF_OBJECT_TYPE_LOOPER, (PXPADFCleanupObjectCallback)_xpadf_DestroyLooper,
-                                                       sizeof(XPADF_LOOPER), _pContext, _pStopCallback);
+  XPADF_RESULT _result;
 
-    if(XPADF_SUCCEEDED(_result)) {
+  if(_pExecuteCallback) {
+    if(XPADF_SUCCEEDED(_result = _xpadf_AllocateThreadObject((PXPADF_OBJECT *)_phLooper, XPADF_OBJECT_TYPE_LOOPER, (PXPADFCleanupObjectCallback)_xpadf_DestroyLooper,
+                                                             sizeof(XPADF_LOOPER), _pContext, _pStopCallback))) {
       pthread_attr_t _sAttribute;
 
       if(pthread_attr_init(&_sAttribute))
@@ -78,10 +80,10 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_CreateLooper, (XPADF_OUT    PXPADF_HANDLE    
 
       _xpadf_DereferenceObject(*_phLooper);
     }
+  } else _result = XPADF_ERROR_INVALID_PARAMETERS;
 
-    if(_pCleanupCallback)
-      _pCleanupCallback(NULL, _pContext, _result);
-    
-    return _result;
-  } return XPADF_ERROR_INVALID_PARAMETERS;
+  if(_pCleanupCallback)
+    _pCleanupCallback(NULL, _pContext, _result);
+  
+  return _result;
 }

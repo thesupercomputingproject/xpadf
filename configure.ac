@@ -50,16 +50,32 @@ AS_IF([test "x$ac_cv_c_compiler_gnu" = "xyes"], [
 ])
 
 AX_PTHREAD([
-  AC_CHECK_FUNC([pthread_create])
-  AC_CHECK_FUNC([pthread_equal])
-  AC_CHECK_FUNC([pthread_self])
-  AC_CHECK_FUNC([pthread_join])
-  AC_CHECK_FUNC([pthread_attr_init])
-  AC_CHECK_FUNC([pthread_attr_setdetachstate])
-  AC_CHECK_FUNC([pthread_attr_destroy])
+  AC_CHECK_FUNCS([pthread_create], [], [AC_CHECK_LIB([pthread], [pthread_create])])
+  AC_CHECK_FUNCS([pthread_equal])
+  AC_CHECK_FUNCS([pthread_self])
+  AC_CHECK_FUNCS([pthread_join])
+  AC_CHECK_FUNCS([pthread_attr_init])
+  AC_CHECK_FUNCS([pthread_attr_setdetachstate])
+  AC_CHECK_FUNCS([pthread_attr_destroy])
+  AC_CHECK_FUNCS([pthread_mutex_destroy])
+  AC_CHECK_FUNCS([pthread_mutex_lock])
+  AC_CHECK_FUNCS([pthread_mutex_unlock])
+  AC_CHECK_FUNCS([pthread_mutex_init])
 
   AC_CHECK_TYPE([pthread_attr_t])
   AC_CHECK_TYPE([pthread_t])
+  AC_CHECK_TYPE([pthread_mutex_t])
+
+  AC_CHECK_DECLS([PTHREAD_CREATE_JOINABLE], [], [], [[#include <pthread.h>]])
+])
+
+AC_CHECK_HEADER([semaphore.h], [
+  AC_CHECK_FUNCS([sem_post])
+  AC_CHECK_FUNCS([sem_wait])
+  AC_CHECK_FUNCS([sem_destroy])
+  AC_CHECK_FUNCS([sem_init])
+
+  AC_CHECK_TYPE([sem_t], [], [], [[#include <semaphore.h>]])
 ])
 
 AC_CONFIG_HEADER([include/xpadf/common/config.h:config.h.in])
