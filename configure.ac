@@ -78,6 +78,22 @@ AC_CHECK_HEADER([semaphore.h], [
   AC_CHECK_TYPE([sem_t], [], [], [[#include <semaphore.h>]])
 ])
 
+AC_CHECK_HEADER([sys/epoll.h], [
+  AC_CHECK_FUNCS([epoll_create1], [AC_CHECK_DECLS([EPOLL_CLOEXEC], [], [], [[#include <sys/epoll.h>]])], [AC_CHECK_FUNCS([epoll_create])])
+  AC_CHECK_FUNCS([epoll_ctl])
+  AC_CHECK_FUNCS([epoll_wait])
+
+  AC_CHECK_TYPE([struct epoll_event], [], [], [[#include <sys/epoll.h>]])
+
+  AC_CHECK_DECLS([EPOLLIN],       [], [], [[#include <sys/epoll.h>]])
+  AC_CHECK_DECLS([EPOLLOUT],      [], [], [[#include <sys/epoll.h>]])
+  AC_CHECK_DECLS([EPOLLONESHOT],  [], [], [[#include <sys/epoll.h>]])
+  AC_CHECK_DECLS([EPOLL_CTL_ADD], [], [], [[#include <sys/epoll.h>]])
+  AC_CHECK_DECLS([EPOLL_CTL_MOD], [], [], [[#include <sys/epoll.h>]])
+])
+
+AM_CONDITIONAL([HAVE_EPOLL], [test x$ac_cv_header_sys_epoll_h = xyes])
+
 AC_CONFIG_HEADER([include/xpadf/common/config.h:config.h.in])
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

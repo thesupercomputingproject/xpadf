@@ -6,3 +6,7 @@ libxpadf_la_SOURCES	= src/posix/common/objects.c		\
 				src/posix/thread/thread.c	\
 				src/posix/thread/looper.c	\
 				src/posix/thread/tpool.c
+
+if HAVE_EPOLL
+libxpadf_la_SOURCES	+= src/posix/io/epollip.c
+endif
