@@ -23,6 +23,8 @@ extern "C" {
   XPADF_FUNCTION(XPADF_RESULT, xpadf_PollIO, (XPADF_IN     XPADF_HANDLE _hIOPoller,
                                               XPADF_IN_OPT XPADF_HANDLE _hThreadPool));
 
+  XPADF_FUNCTION(XPADF_RESULT, xpadf_StopIOPoller, (XPADF_IN XPADF_HANDLE _hIOPoller));
+
 # if defined(__cplusplus)
 }
 # endif /* __cplusplus */

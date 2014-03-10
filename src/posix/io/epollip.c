@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <malloc.h>
+#include <errno.h>
 
 #include <sys/epoll.h>
 
@@ -8,29 +9,32 @@
 #include <xpadf/internal/posix/thread/tpool.h>
 
 XPADF_STATIC_FUNCTION(XPADF_RESULT, _xpadf_DestroyEPollIOPoller, (XPADF_IN PXPADF_IO_POLLER _pIOPoller)) {
-  XPADF_RESULT           _result;
-  PXPADF_IO              _pIO;
-  PXPADF_IO              _pNextIO;
-  PXPADF_IO_POLLER_EVENT _pEvent;
-  PXPADF_IO_POLLER_EVENT _pNextEvent;
+  XPADF_RESULT _result = XPADF_OK;
 
-  _pIOPoller->m_bRunning = XPADF_FALSE;
+  if(!_pIOPoller->m_bRunning || XPADF_SUCCEEDED(_result = xpadf_StopIOPoller((XPADF_HANDLE)_pIOPoller))) {
+    PXPADF_IO              _pIO;
+    PXPADF_IO              _pNextIO;
+    PXPADF_IO_POLLER_EVENT _pEvent;
+    PXPADF_IO_POLLER_EVENT _pNextEvent;
 
-  close(_pIOPoller->m_hEPoll);
-
-  for(_pIO = _pIOPoller->m_pIOListHead; _pIO; _pIO = _pNextIO) {
-    _pNextIO = _pIO->m_pNext;
-
-    _xpadf_DereferenceObject((PXPADF_OBJECT)_pIO);
+    close(_pIOPoller->m_aPipes[0]);
+    close(_pIOPoller->m_aPipes[1]);
+    close(_pIOPoller->m_hEPoll);
+    
+    for(_pIO = _pIOPoller->m_pIOListHead; _pIO; _pIO = _pNextIO) {
+      _pNextIO = _pIO->m_pNext;
+      
+      xpadf_DestroyObject((XPADF_HANDLE)_pIO);
+    }
+    
+    for(_pEvent = _pIOPoller->m_pFreeEventListHead; _pEvent; _pEvent = _pNextEvent) {
+      _pNextEvent = _pEvent->m_pNext;
+      
+      free(_pEvent);
+    }
+    
+    pthread_mutex_destroy(&_pIOPoller->m_hLock);
   }
-
-  for(_pEvent = _pIOPoller->m_pFreeEventListHead; _pEvent; _pEvent = _pNextEvent) {
-    _pNextEvent = _pEvent->m_pNext;
-
-    free(_pEvent);
-  }
-
-  pthread_mutex_destroy(&_pIOPoller->m_hLock);
 
   return _result;
 }
@@ -38,38 +42,26 @@ XPADF_STATIC_FUNCTION(XPADF_RESULT, _xpadf_DestroyEPollIOPoller, (XPADF_IN PXPAD
 XPADF_STATIC_FUNCTION(XPADF_RESULT, _xpadf_PerformIO, (XPADF_IN_OPT XPADF_HANDLE           _hThreadPool,
                                                        XPADF_IN     PXPADF_IO_POLLER_EVENT _pEvent)) {
   XPADF_RESULT _result;
-  PXPADF_IO    _pIO = _pEvent->m_pIO;
 
-  _pIO->m_nOperations = 0;
-
-  if(_pEvent->m_nOperations & XPADF_IO_OPERATION_READ)
-    _result = _pIO->m_sRead.m_pCallback(_pIO);
-  else
-    _result = XPADF_OK;
-
-  if(XPADF_SUCCEEDED(_result) && (_pEvent->m_nOperations & XPADF_IO_OPERATION_WRITE))
-    _result = _pIO->m_sWrite.m_pCallback(_pIO);
-
-  if(XPADF_SUCCEEDED(_result)) {
-    PXPADF_IO_POLLER   _pIOPoller = (PXPADF_IO_POLLER)_pIO->m_hIOPoller;
-    struct epoll_event _sEvent    = {0
-#if defined(HAVE_DECL_EPOLLONESHOT)
-                                     | EPOLLONESHOT
-#endif /* HAVE_DECL_EPOLLONESHOT */
-                                     , {.ptr = _pIO}};
-
-    if(_pIO->m_nOperations & XPADF_IO_OPERATION_READ)
-      _sEvent.events |= EPOLLIN;
+  if(_pEvent->m_nOperations) {
+    PXPADF_IO _pIO = _pEvent->m_pIO;
     
-    if(_pIO->m_nOperations & XPADF_IO_OPERATION_WRITE)
-      _sEvent.events |= EPOLLOUT;
-
-    if(epoll_ctl(_pIOPoller->m_hEPoll, EPOLL_CTL_MOD, _pIO->m_hFD, &_sEvent))
-      _result = XPADF_ERROR_REGISTER_IO;
-  }
-
-  if(XPADF_FAILED(_result))
-    _xpadf_DereferenceObject((PXPADF_OBJECT)_pIO);
+    _pIO->m_nOperations = 0;
+    
+    if(_pEvent->m_nOperations & XPADF_IO_OPERATION_READ)
+      _result = _pIO->m_sRead.m_pInternalCallback(_pIO);
+    else
+      _result = XPADF_OK;
+    
+    if(XPADF_SUCCEEDED(_result) && (_pEvent->m_nOperations & XPADF_IO_OPERATION_WRITE))
+      _result = _pIO->m_sWrite.m_pInternalCallback(_pIO);
+    
+    if(XPADF_SUCCEEDED(_result))
+      _result = _xpadf_EnableIOOperations(_pIO);
+    
+    if(XPADF_FAILED(_result))
+      xpadf_DestroyObject((XPADF_HANDLE)_pIO);
+  } else _result = XPADF_OK;
 
   return _result;
 }
@@ -80,6 +72,73 @@ XPADF_STATIC_FUNCTION(void, _xpadf_EventCleanup, (XPADF_IN_OPT XPADF_HANDLE     
   PXPADF_IO_POLLER _pIOPoller = (PXPADF_IO_POLLER)_pEvent->m_pIO->m_hIOPoller;
 
   XPADF_ATOMIC_PUSH_SLIST_HEAD(_pEvent, _pIOPoller->m_pFreeEventListHead, m_pNext);
+}
+
+XPADF_INTERNAL_FUNCTION(XPADF_RESULT, _xpadf_EnableIOOperations, (XPADF_IN PXPADF_IO _pIO)) {
+  XPADF_RESULT       _result;
+  PXPADF_IO_POLLER   _pIOPoller = (PXPADF_IO_POLLER)_pIO->m_hIOPoller;
+  struct epoll_event _sEvent    = {0
+#if defined(HAVE_DECL_EPOLLONESHOT)
+                                   | EPOLLONESHOT
+#endif /* HAVE_DECL_EPOLLONESHOT */
+                                   , {.ptr = _pIO}};
+  
+  if(_pIO->m_nOperations & XPADF_IO_OPERATION_READ)
+    _sEvent.events |= EPOLLIN;
+  
+  if(_pIO->m_nOperations & XPADF_IO_OPERATION_WRITE)
+    _sEvent.events |= EPOLLOUT;
+  
+  if(epoll_ctl(_pIOPoller->m_hEPoll, EPOLL_CTL_MOD, _pIO->m_hFD, &_sEvent))
+    _result = XPADF_ERROR_REGISTER_IO;
+  else _result = XPADF_OK;
+
+  return _result;
+}
+
+XPADF_INTERNAL_FUNCTION(void, _xpadf_UnregisterIOFromIOPoller, (XPADF_IN PXPADF_IO _pIO)) {
+  PXPADF_IO_POLLER _pIOPoller = (PXPADF_IO_POLLER)_pIO->m_hIOPoller;
+
+  if(_pIOPoller) {
+    pthread_mutex_lock(&_pIOPoller->m_hLock);
+    
+    if(_pIO->m_pPrevious)
+      _pIO->m_pPrevious->m_pNext = _pIO->m_pNext;
+    else
+      _pIOPoller->m_pIOListHead = _pIO->m_pNext;
+    
+    if(_pIO->m_pNext)
+      _pIO->m_pNext->m_pPrevious = _pIO->m_pPrevious;
+    
+    pthread_mutex_unlock(&_pIOPoller->m_hLock);
+  }
+}
+
+XPADF_INTERNAL_FUNCTION(XPADF_RESULT, _xpadf_RegisterIOWithIOPoller, (XPADF_IN XPADF_HANDLE _hIOPoller,
+                                                                      XPADF_IN XPADF_HANDLE _hIO,
+                                                                      XPADF_IN XPADF_ULONG  _nOperation)) {
+  XPADF_RESULT _result = xpadf_RegisterIOWithIOPoller(_hIOPoller, _hIO);
+
+  if(XPADF_SUCCEEDED(_result)) {
+    PXPADF_IO_POLLER   _pIOPoller = (PXPADF_IO_POLLER)_hIOPoller;
+    PXPADF_IO          _pIO       = (PXPADF_IO)_hIO;
+    struct epoll_event _sEvent    = {0
+#if defined(HAVE_DECL_EPOLLONESHOT)
+                                     | EPOLLONESHOT
+#endif /* HAVE_DECL_EPOLLONESHOT */
+                                     , {.ptr = _pIO}};
+
+    if(XPADF_IO_OPERATION_READ & _nOperation)
+      _sEvent.events |= EPOLLIN;
+    
+    if(XPADF_IO_OPERATION_WRITE & _nOperation)
+      _sEvent.events |= EPOLLOUT;
+
+    if(epoll_ctl(_pIOPoller->m_hEPoll, EPOLL_CTL_MOD, _pIO->m_hFD, &_sEvent))
+      _result = XPADF_ERROR_REGISTER_IO;
+  }
+
+  return _result;
 }
 
 XPADF_FUNCTION(XPADF_RESULT, xpadf_CreateIOPoller, (XPADF_OUT PXPADF_HANDLE _phIOPoller)) {
@@ -103,16 +162,31 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_CreateIOPoller, (XPADF_OUT PXPADF_HANDLE _phI
 #endif
           _result = XPADF_ERROR_OPEN_DEVICE;
         else {
-          _pIOPoller->m_bRunning = XPADF_TRUE;
-          
-          return _result;
+          if(pipe(_pIOPoller->m_aPipes))
+            _result = XPADF_ERROR_OPEN_DEVICE;
+          else {
+            struct epoll_event _sEvent = {EPOLLIN, {.ptr = NULL}};
+
+            if(epoll_ctl(_pIOPoller->m_hEPoll, EPOLL_CTL_ADD, _pIOPoller->m_aPipes[0], &_sEvent))
+              _result = XPADF_ERROR_REGISTER_IO;
+            else {
+              _pIOPoller->m_bRunning = XPADF_TRUE;
+            
+              return _result;
+            }
+
+            close(_pIOPoller->m_aPipes[0]);
+            close(_pIOPoller->m_aPipes[1]);
+          }
+
+          close(_pIOPoller->m_hEPoll);
         }
       
       pthread_mutex_destroy(&_pIOPoller->m_hLock);
       }
     }
 
-    _xpadf_DereferenceObject((PXPADF_OBJECT)(*_phIOPoller));
+    free(*_phIOPoller);
 
     return _result;
   } return XPADF_ERROR_INVALID_PARAMETERS;
@@ -129,10 +203,7 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_RegisterIOWithIOPoller, (XPADF_IN XPADF_HANDL
       if(_pIOPoller->m_bRunning) {
         XPADF_RESULT _result;
         
-        _xpadf_ReferenceObject((PXPADF_OBJECT)_pIO);
-        _xpadf_ReferenceObject((PXPADF_OBJECT)_pIOPoller);
-        
-        if(_pIO->m_hIOPoller || !_pIOPoller->m_bRunning)
+        if(_pIO->m_hIOPoller)
           _result = XPADF_ERROR_INVALID_OPERATION;
         else {
           struct epoll_event _sEvent = {0
@@ -140,7 +211,9 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_RegisterIOWithIOPoller, (XPADF_IN XPADF_HANDL
                                         | EPOLLONESHOT
 #endif /* HAVE_DECL_EPOLLONESHOT */
                                         , {.ptr = _pIO}};
-          
+
+          _xpadf_ReferenceObject((PXPADF_OBJECT)_pIO);
+
           _pIO->m_hIOPoller = (XPADF_HANDLE)_pIOPoller;
           _pIO->m_pPrevious = NULL;
           
@@ -153,15 +226,10 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_RegisterIOWithIOPoller, (XPADF_IN XPADF_HANDL
           
           if(epoll_ctl(_pIOPoller->m_hEPoll, EPOLL_CTL_ADD, _pIO->m_hFD, &_sEvent))
             _result = XPADF_ERROR_REGISTER_IO;
-          else {
-            _xpadf_DereferenceObject((PXPADF_OBJECT)_pIOPoller);
-            
-            return _result;
-          }
+          else return XPADF_OK;
+
+          xpadf_DestroyObject((XPADF_HANDLE)_pIO);
         }
-        
-        _xpadf_DereferenceObject((PXPADF_OBJECT)_pIOPoller);
-        _xpadf_DereferenceObject((PXPADF_OBJECT)_pIO);
 
         return _result;
       } return XPADF_ERROR_INVALID_OPERATION;
@@ -194,14 +262,14 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_PollIO, (XPADF_IN     XPADF_HANDLE _hIOPoller
           if(XPADF_OBJECT_TYPE_THREAD_POOL == _pThreadPool->m_sObject.m_sObject.m_eType)
             _xpadf_ReferenceObject((PXPADF_OBJECT)_pThreadPool);
           else {
-            _xpadf_DereferenceObject((PXPADF_OBJECT)_pIOPoller);
+            xpadf_DestroyObject((XPADF_HANDLE)_pIOPoller);
             
             return XPADF_ERROR_INVALID_PARAMETERS;
           }
         }
         
         if((_nLimit = epoll_wait(_pIOPoller->m_hEPoll, _aEvents, sizeof(_aEvents) / sizeof(struct epoll_event), -1)) < 0)
-          _result = XPADF_ERROR_POLL_IO;
+          _result = (EINTR == errno) ? XPADF_OK : XPADF_ERROR_POLL_IO;
         else if(_pThreadPool) {
 #if !defined(HAVE_DECL_EPOLLONESHOT)
           PXPADF_IO          _pIO    = (PXPADF_IO)_aEvents->data.ptr;
@@ -214,50 +282,73 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_PollIO, (XPADF_IN     XPADF_HANDLE _hIOPoller
             PXPADF_IO_POLLER_EVENT _pEvent;
             
             for(_i = 0; (_i < _nLimit) && XPADF_SUCCEEDED(_result); ++_i) {
-              XPADF_ATOMIC_POP_SLIST_HEAD(_pEvent, _pIOPoller->m_pFreeEventListHead, m_pNext);
-              
-              if(!_pEvent)
-                _pEvent = (PXPADF_IO_POLLER_EVENT)malloc(sizeof(XPADF_IO_POLLER_EVENT));
-              
-              if(_pEvent) {
-                if(_aEvents[_i].events & EPOLLIN)
-                  _pEvent->m_nOperations = XPADF_IO_OPERATION_READ;
-                else
-                  _pEvent->m_nOperations = 0;
+              if(_aEvents[_i].data.ptr) {
+                XPADF_ATOMIC_POP_SLIST_HEAD(_pEvent, _pIOPoller->m_pFreeEventListHead, m_pNext);
                 
-                if(_aEvents[_i].events & EPOLLOUT)
-                  _pEvent->m_nOperations |= XPADF_IO_OPERATION_WRITE;
+                if(!_pEvent)
+                  _pEvent = (PXPADF_IO_POLLER_EVENT)malloc(sizeof(XPADF_IO_POLLER_EVENT));
                 
-                _pEvent->m_pIO = (PXPADF_IO)_aEvents[_i].data.ptr;
-                
-                _result = xpadf_EnqueueThreadPoolWork(_hThreadPool, XPADF_FALSE, _pEvent, (PXPADFThreadCallback)_xpadf_PerformIO,
-                                                      (PXPADFThreadCleanupCallback)_xpadf_EventCleanup);
-              } else _result = XPADF_ERROR_OUT_OF_MEMORY;
+                if(_pEvent) {
+                  if(_aEvents[_i].events & EPOLLIN)
+                    _pEvent->m_nOperations = XPADF_IO_OPERATION_READ;
+                  else
+                    _pEvent->m_nOperations = 0;
+                  
+                  if(_aEvents[_i].events & EPOLLOUT)
+                    _pEvent->m_nOperations |= XPADF_IO_OPERATION_WRITE;
+                  
+                  _pEvent->m_pIO = (PXPADF_IO)_aEvents[_i].data.ptr;
+
+                  _result = xpadf_EnqueueThreadPoolWork(_hThreadPool, XPADF_FALSE, _pEvent, (PXPADFThreadCallback)_xpadf_PerformIO,
+                                                        (PXPADFThreadCleanupCallback)_xpadf_EventCleanup);
+                } else _result = XPADF_ERROR_OUT_OF_MEMORY;
+              } else break;
             }
 #if !defined(HAVE_DECL_EPOLLONESHOT)
           }
 #endif /* !HAVE_DECL_EPOLLONESHOT */
         } else {
           for(_i = 0; _i < _nLimit; ++_i) {
-            XPADF_IO_POLLER_EVENT _sEvent = {NULL, 0, (PXPADF_IO)_aEvents[_i].data.ptr};
-            
-            if(_aEvents[_i].events & EPOLLIN)
-              _sEvent.m_nOperations = XPADF_IO_OPERATION_READ;
-            
-            if(_aEvents[_i].events & EPOLLOUT)
-              _sEvent.m_nOperations |= XPADF_IO_OPERATION_WRITE;
-            
-            _xpadf_PerformIO(NULL, &_sEvent);
+            if(_aEvents[_i].data.ptr) {
+              XPADF_IO_POLLER_EVENT _sEvent = {NULL, 0, (PXPADF_IO)_aEvents[_i].data.ptr};
+              
+              if(_aEvents[_i].events & EPOLLIN)
+                _sEvent.m_nOperations = XPADF_IO_OPERATION_READ;
+              
+              if(_aEvents[_i].events & EPOLLOUT)
+                _sEvent.m_nOperations |= XPADF_IO_OPERATION_WRITE;
+
+              _xpadf_PerformIO(NULL, &_sEvent);
+            } else break;
           }
         }
         
         if(_pThreadPool)
-          _xpadf_DereferenceObject((PXPADF_OBJECT)_pThreadPool);
+          xpadf_DestroyObject((XPADF_HANDLE)_pThreadPool);
         
-        _xpadf_DereferenceObject((PXPADF_OBJECT)_pIOPoller);
+        xpadf_DestroyObject((XPADF_HANDLE)_pIOPoller);
         
         return _result;
-      } else XPADF_ERROR_INVALID_OPERATION;
+      } return XPADF_ERROR_INVALID_OPERATION;
+    }
+  } return XPADF_ERROR_INVALID_PARAMETERS;
+}
+
+XPADF_FUNCTION(XPADF_RESULT, xpadf_StopIOPoller, (XPADF_IN XPADF_HANDLE _hIOPoller)) {
+  if(_hIOPoller) {
+    PXPADF_IO_POLLER _pIOPoller = (PXPADF_IO_POLLER)_hIOPoller;
+
+    if(XPADF_OBJECT_TYPE_IO_POLLER == _pIOPoller->m_sObject.m_eType) {
+      if(_pIOPoller->m_bRunning) {
+        _pIOPoller->m_bRunning = XPADF_FALSE;
+
+        if(write(_pIOPoller->m_aPipes[1], &_pIOPoller->m_bRunning, sizeof(_pIOPoller->m_bRunning)) > 0)
+          return XPADF_OK;
+
+        _pIOPoller->m_bRunning = XPADF_TRUE;
+
+        return XPADF_ERROR_WRITE_IO;
+      } return XPADF_ERROR_INVALID_OPERATION;
     }
   } return XPADF_ERROR_INVALID_PARAMETERS;
 }

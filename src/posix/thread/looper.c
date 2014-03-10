@@ -1,7 +1,11 @@
+#include <malloc.h>
+
 #include <xpadf/internal/posix/thread/looper.h>
 
 XPADF_STATIC_FUNCTION(XPADF_RESULT, _xpadf_DestroyLooper, (XPADF_IN PXPADF_LOOPER _pLooper)) {
-  if(pthread_equal(pthread_self(), _pLooper->m_hThread)) {
+  if(pthread_equal(pthread_self(), _pLooper->m_hThread))
+     return XPADF_ERROR_INVALID_OPERATION;
+  else {
     XPADF_RESULT _result;
     
     _pLooper->m_bRunning = XPADF_FALSE;
@@ -21,7 +25,7 @@ XPADF_STATIC_FUNCTION(XPADF_RESULT, _xpadf_DestroyLooper, (XPADF_IN PXPADF_LOOPE
     _pLooper->m_bRunning = XPADF_TRUE;
     
     return _result;
-  } return XPADF_ERROR_INVALID_OPERATION;
+  }
 }
 
 XPADF_STATIC_FUNCTION(void *, _xpadf_Looper, (XPADF_IN PXPADF_LOOPER _pLooper)) {
@@ -78,7 +82,7 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_CreateLooper, (XPADF_OUT    PXPADF_HANDLE    
         pthread_attr_destroy(&_sAttribute);
       }
 
-      _xpadf_DereferenceObject(*_phLooper);
+      free(*_phLooper);
     }
   } else _result = XPADF_ERROR_INVALID_PARAMETERS;
 

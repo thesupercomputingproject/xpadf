@@ -7,6 +7,11 @@
 
 # include <xpadf/common/objects.h>
 
+XPADF_CALLBACK(XPADF_RESULT, PXPADFIOReadCallback, (XPADF_IN     XPADF_HANDLE    _hIO,
+                                                    XPADF_IN_OPT XPADF_PVOID     _pContext,
+                                                    XPADF_IN_OPT PXPADF_BUFFER64 _pBuffer));
+XPADF_CALLBACK(XPADF_RESULT, PXPADFIOWriteCallback, (XPADF_IN     XPADF_HANDLE _hIO,
+                                                     XPADF_IN_OPT XPADF_PVOID  _pContext));
 XPADF_CALLBACK(void, PXPADFIOCleanupCallback, (XPADF_IN     XPADF_HANDLE _hIO,
                                                XPADF_IN_OPT XPADF_PVOID  _pContext,
                                                XPADF_IN     XPADF_RESULT _nStatus));
@@ -15,7 +20,18 @@ XPADF_CALLBACK(void, PXPADFIOCleanupCallback, (XPADF_IN     XPADF_HANDLE _hIO,
 extern "C" {
 # endif /* __cplusplus */
 
-  
+  XPADF_FUNCTION(XPADF_RESULT, xpadf_UpdateIOCleanupCallback, (XPADF_IN     XPADF_HANDLE            _hIO,
+                                                               XPADF_IN_OPT XPADF_PVOID             _pContext,
+                                                               XPADF_IN_OPT PXPADFIOCleanupCallback _pCleanupCallback));
+
+  XPADF_FUNCTION(XPADF_RESULT, xpadf_IORead, (XPADF_IN     XPADF_HANDLE         _hIO,
+                                              XPADF_IN_OPT XPADF_SIZE           _nSize,
+                                              XPADF_IN_OPT XPADF_PVOID          _pContext,
+                                              XPADF_IN     PXPADFIOReadCallback _pReadCompleteCallback));
+  XPADF_FUNCTION(XPADF_RESULT, xpadf_IOWrite, (XPADF_IN     XPADF_HANDLE          _hIO,
+                                               XPADF_IN     PXPADF_BUFFER64       _pBuffer,
+                                               XPADF_IN_OPT XPADF_PVOID           _pContext,
+                                               XPADF_IN     PXPADFIOWriteCallback _pWriteCompleteCallback));
 
 # if defined(__cplusplus)
 }

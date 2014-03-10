@@ -20,7 +20,8 @@ XPADF_STATIC_FUNCTION(XPADF_RESULT, _xpadf_DestroyThreadPool, (XPADF_IN PXPADF_T
     for(_i = 0; _i < _pThreadPool->m_nActiveWorkers; ++_i)
       sem_post(&_pThreadPool->m_hJobEvent);
 
-    sem_wait(&_pThreadPool->m_hShutdownEvent);
+    if(_pThreadPool->m_nActiveWorkers)
+      sem_wait(&_pThreadPool->m_hShutdownEvent);
 
     for(_pWork = _pThreadPool->m_pPendingWorkListHead; _pWork; _pWork = _pNext) {
       _pNext = _pWork->m_pNext;
@@ -57,7 +58,8 @@ XPADF_STATIC_FUNCTION(void *, _xpadf_ThreadPool, (XPADF_IN PXPADF_THREAD_POOL _p
   while(_pThreadPool->m_bRunning) {
     pthread_mutex_lock(&_pThreadPool->m_hLock);
     if((_pWork = _pThreadPool->m_pPendingWorkListHead)) {
-      _pThreadPool->m_pPendingWorkListHead = _pWork->m_pNext;
+      if(!(_pThreadPool->m_pPendingWorkListHead = _pWork->m_pNext))
+        _pThreadPool->m_pPendingWorkListTail = NULL;
       pthread_mutex_unlock(&_pThreadPool->m_hLock);
 
       if(XPADF_FAILED(_result = _pWork->m_pWorkCallback(_pThreadPool, _pWork->m_pContext)) || !_pWork->m_bPermanent) {
@@ -78,7 +80,6 @@ XPADF_STATIC_FUNCTION(void *, _xpadf_ThreadPool, (XPADF_IN PXPADF_THREAD_POOL _p
         pthread_mutex_unlock(&_pThreadPool->m_hLock);
       }
     } else if(_pThreadPool->m_nActiveWorkers > _pThreadPool->m_nMinimumWorkers) {
-      --_pThreadPool->m_nActiveWorkers;
       pthread_mutex_unlock(&_pThreadPool->m_hLock);
 
       break;
@@ -88,6 +89,10 @@ XPADF_STATIC_FUNCTION(void *, _xpadf_ThreadPool, (XPADF_IN PXPADF_THREAD_POOL _p
       sem_wait(&_pThreadPool->m_hJobEvent);
     }
   }
+
+  pthread_mutex_lock(&_pThreadPool->m_hLock);
+  --_pThreadPool->m_nActiveWorkers;
+  pthread_mutex_unlock(&_pThreadPool->m_hLock);
 
   if(!_pThreadPool->m_nActiveWorkers)
     sem_post(&_pThreadPool->m_hShutdownEvent);
@@ -130,7 +135,7 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_CreateThreadPool, (XPADF_OUT    PXPADF_HANDLE
         pthread_mutex_destroy(&_pThreadPool->m_hLock);
       }
 
-      _xpadf_DereferenceObject(*_phThreadPool); 
+      free(*_phThreadPool); 
     }
 
     return _result;
@@ -192,7 +197,7 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_EnqueueThreadPoolWork, (XPADF_IN     XPADF_HA
                 else {
                   pthread_attr_destroy(&_sAttribute);
                   
-                  _xpadf_DereferenceObject((PXPADF_OBJECT)_pThreadPool);
+                  xpadf_DestroyObject((XPADF_HANDLE)_pThreadPool);
 
                   return XPADF_OK;
                 }
@@ -207,7 +212,7 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_EnqueueThreadPoolWork, (XPADF_IN     XPADF_HA
 
               sem_post(&_pThreadPool->m_hJobEvent);
 
-              _xpadf_DereferenceObject((PXPADF_OBJECT)_pThreadPool);
+              xpadf_DestroyObject((XPADF_HANDLE)_pThreadPool);
 
               return XPADF_CONVERT_ERROR_TO_WARNING(_result);
             } else pthread_mutex_unlock(&_pThreadPool->m_hLock);
@@ -216,14 +221,14 @@ XPADF_FUNCTION(XPADF_RESULT, xpadf_EnqueueThreadPoolWork, (XPADF_IN     XPADF_HA
 
             sem_post(&_pThreadPool->m_hJobEvent);
 
-            _xpadf_DereferenceObject((PXPADF_OBJECT)_pThreadPool);
+            xpadf_DestroyObject((XPADF_HANDLE)_pThreadPool);
 
             return XPADF_OK;
           }
         } else _result = XPADF_ERROR_OUT_OF_MEMORY;
       } else _result = XPADF_ERROR_INVALID_OPERATION;
 
-      _xpadf_DereferenceObject((PXPADF_OBJECT)_pThreadPool);
+      xpadf_DestroyObject((XPADF_HANDLE)_pThreadPool);
     } else _result = XPADF_ERROR_INVALID_PARAMETERS;
   } else _result = XPADF_ERROR_INVALID_PARAMETERS;
 

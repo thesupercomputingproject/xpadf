@@ -69,7 +69,7 @@ AX_PTHREAD([
   AC_CHECK_DECLS([PTHREAD_CREATE_JOINABLE], [], [], [[#include <pthread.h>]])
 ])
 
-AC_CHECK_HEADER([semaphore.h], [
+AC_CHECK_HEADERS([semaphore.h], [
   AC_CHECK_FUNCS([sem_post])
   AC_CHECK_FUNCS([sem_wait])
   AC_CHECK_FUNCS([sem_destroy])
@@ -78,7 +78,7 @@ AC_CHECK_HEADER([semaphore.h], [
   AC_CHECK_TYPE([sem_t], [], [], [[#include <semaphore.h>]])
 ])
 
-AC_CHECK_HEADER([sys/epoll.h], [
+AC_CHECK_HEADERS([sys/epoll.h], [
   AC_CHECK_FUNCS([epoll_create1], [AC_CHECK_DECLS([EPOLL_CLOEXEC], [], [], [[#include <sys/epoll.h>]])], [AC_CHECK_FUNCS([epoll_create])])
   AC_CHECK_FUNCS([epoll_ctl])
   AC_CHECK_FUNCS([epoll_wait])
@@ -93,6 +93,18 @@ AC_CHECK_HEADER([sys/epoll.h], [
 ])
 
 AM_CONDITIONAL([HAVE_EPOLL], [test x$ac_cv_header_sys_epoll_h = xyes])
+
+AC_CHECK_HEADERS([sys/socket.h], [
+  AC_CHECK_FUNCS([recv])
+  AC_CHECK_FUNCS([send])
+  AC_CHECK_FUNCS([accept])
+  AC_CHECK_FUNCS([connect])
+])
+
+AC_CHECK_HEADERS([errno.h], [
+  AC_CHECK_DECLS([EAGAIN],      [], [], [[#include <errno.h>]])
+  AC_CHECK_DECLS([EWOULDBLOCK], [], [], [[#include <errno.h>]])
+])
 
 AC_CONFIG_HEADER([include/xpadf/common/config.h:config.h.in])
 AC_CONFIG_FILES([Makefile])

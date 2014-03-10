@@ -12,6 +12,7 @@ enum XPADF_OBJECT_TYPE {
   XPADF_OBJECT_TYPE_THREAD_POOL = 1,
   XPADF_OBJECT_TYPE_IO_POLLER   = 2,
   XPADF_OBJECT_TYPE_IO          = 3,
+  XPADF_OBJECT_TYPE_LOCK        = 4,
   XPADF_OBJECT_TYPE_INVALID
 };
 
@@ -30,6 +31,5 @@ XPADF_INTERNAL_FUNCTION(XPADF_RESULT, _xpadf_AllocateObject, (XPADF_OUT PXPADF_O
                                                               XPADF_IN  PXPADFCleanupObjectCallback  _pCleanupObjectCallback,
                                                               XPADF_IN  XPADF_SIZE                   _nSize));
 XPADF_INTERNAL_FUNCTION(void, _xpadf_ReferenceObject, (XPADF_INOUT PXPADF_OBJECT _pObject));
-XPADF_INTERNAL_FUNCTION(void, _xpadf_DereferenceObject, (XPADF_INOUT PXPADF_OBJECT _pObject));
 
 #endif /* !__302B00736D18A25B4BBBD28F37A__ */

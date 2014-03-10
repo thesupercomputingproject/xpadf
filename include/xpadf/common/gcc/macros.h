@@ -2,6 +2,7 @@
 # define __99FE0D4B3D7FED85966557542C5__
 
 # define XPADF_IN
+# define XPADF_IN_Z
 # define XPADF_IN_OPT
 
 # define XPADF_OUT

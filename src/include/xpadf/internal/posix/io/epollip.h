@@ -8,6 +8,7 @@
 # include <xpadf/internal/common/objects.h>
 
 # include <xpadf/internal/posix/io/io.h>
+# include <xpadf/internal/posix/io/iopoller.h>
 
 XPADF_DECLARE_STRUCT(XPADF_IO_POLLER);
 XPADF_DECLARE_STRUCT(XPADF_IO_POLLER_EVENT);
@@ -28,6 +29,8 @@ struct XPADF_IO_POLLER {
   pthread_mutex_t        m_hLock;
 
   int                    m_hEPoll;
+
+  int                    m_aPipes[2];
 
   PXPADF_IO              m_pIOListHead;
 
